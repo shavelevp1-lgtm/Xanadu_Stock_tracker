@@ -413,7 +413,7 @@ def _should_alert_6k(accession: str, primary_document: str | None) -> tuple[bool
 
 def _parse_date(s: str) -> datetime | None:
     try:
-        return datetime.strptime(s, "%Y-%m-%d")
+        return datetime.strptime(s, "%Y-%m-%d").replace(tzinfo=UTC)
     except ValueError:
         return None
 
