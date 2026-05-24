@@ -2,24 +2,44 @@ name: Daily XNDU stock email
 
 on:
   schedule:
-    # 12:00 UTC ≈ 7:00 AM US Eastern (standard time). Adjust for your timezone.
-    - cron: "0 12 * * 1-5"
+    # 13:00 and 14:00 UTC cover 9:00 AM Toronto (EDT and EST). A step below skips the wrong hour.
+    - cron: "0 13 * * 1-5"
+    - cron: "0 14 * * 1-5"
   workflow_dispatch:
 
 jobs:
   send-email:
     runs-on: ubuntu-latest
     steps:
+      - name: Check 9 AM Toronto (scheduled runs only)
+        id: schedule
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "send=true" >> "$GITHUB_OUTPUT"
+          else
+            HOUR=$(TZ=America/Toronto date +%H)
+            if [ "$HOUR" = "09" ]; then
+              echo "send=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "send=false" >> "$GITHUB_OUTPUT"
+              echo "Skipping: Toronto local hour is ${HOUR}, not 09."
+            fi
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.schedule.outputs.send == 'true'
 
       - uses: actions/setup-python@v5
+        if: steps.schedule.outputs.send == 'true'
         with:
           python-version: "3.12"
 
       - name: Install dependencies
+        if: steps.schedule.outputs.send == 'true'
         run: pip install -r requirements.txt
 
       - name: Send stock email
+        if: steps.schedule.outputs.send == 'true'
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
@@ -27,5 +47,4 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
-          EMAIL_SUBJECT: ${{ secrets.EMAIL_SUBJECT }}
         run: python send_daily_email.py

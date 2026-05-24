@@ -18,8 +18,20 @@ def _format_line(exchange: str, price, currency, change, change_percent) -> str:
     return f"{exchange}: {price:.2f} {currency}  ({chg}, {pct})"
 
 
-def build_email_body() -> str:
-    nasdaq, tsx = get_xanadu_quotes()
+def build_email_subject(nasdaq) -> str:
+    """Subject line highlighting NASDAQ percent change."""
+    if nasdaq.change_percent is not None:
+        sign = "+" if nasdaq.change_percent >= 0 else ""
+        pct = f"{sign}{nasdaq.change_percent:.2f}%"
+    else:
+        pct = "n/a"
+
+    if nasdaq.price is not None:
+        return f"XNDU: NASDAQ {pct} ({nasdaq.price:.2f} {nasdaq.currency})"
+    return f"XNDU: NASDAQ {pct}"
+
+
+def build_email_body(nasdaq, tsx) -> str:
     lines = [
         COMPANY_NAME,
         f"Ticker: {TICKER}",
@@ -53,10 +65,11 @@ def send_email(subject: str, body: str) -> None:
 
 
 def main() -> None:
-    body = build_email_body()
-    subject = os.environ.get("EMAIL_SUBJECT", f"XNDU daily: NASDAQ & TSX")
+    nasdaq, tsx = get_xanadu_quotes()
+    body = build_email_body(nasdaq, tsx)
+    subject = os.environ.get("EMAIL_SUBJECT") or build_email_subject(nasdaq)
     send_email(subject, body)
-    print("Email sent.")
+    print(f"Email sent. Subject: {subject}")
 
 
 if __name__ == "__main__":
