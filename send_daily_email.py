@@ -1,11 +1,13 @@
-"""Fetch XNDU quotes and email a daily summary."""
+"""Fetch XNDU quotes, SEC insider/filing watch, and email a daily summary."""
 
-import os
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
+from email_util import send_email
+from monitor_ceo_filings import format_monitor_sections, run_monitor
 from xanadu_stock import COMPANY_NAME, TICKER, get_xanadu_quotes
+
+TORONTO = ZoneInfo("America/Toronto")
 
 
 def _format_line(exchange: str, price, currency, change, change_percent) -> str:
@@ -31,43 +33,32 @@ def build_email_subject(nasdaq) -> str:
     return f"XNDU: NASDAQ {pct}"
 
 
-def build_email_body(nasdaq, tsx) -> str:
+def build_email_body(nasdaq, tsx, monitor_report) -> str:
     lines = [
         COMPANY_NAME,
         f"Ticker: {TICKER}",
         "",
+        "=== STOCK PRICES ===",
         _format_line("NASDAQ", nasdaq.price, nasdaq.currency, nasdaq.change, nasdaq.change_percent),
         _format_line("TSX", tsx.price, tsx.currency, tsx.change, tsx.change_percent),
         "",
         "Data via Yahoo Finance. Percent change vs previous close.",
     ]
+    lines.extend(format_monitor_sections(monitor_report))
+    lines.extend(
+        [
+            "",
+            f"Sent {datetime.now(TORONTO).strftime('%Y-%m-%d %H:%M')} Toronto time.",
+        ]
+    )
     return "\n".join(lines)
-
-
-def send_email(subject: str, body: str) -> None:
-    host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-    port = int(os.environ.get("SMTP_PORT", "587"))
-    user = os.environ["SMTP_USER"]
-    password = os.environ["SMTP_PASSWORD"]
-    to_addr = os.environ["EMAIL_TO"]
-    from_addr = os.environ.get("EMAIL_FROM", user)
-
-    msg = MIMEMultipart()
-    msg["From"] = from_addr
-    msg["To"] = to_addr
-    msg["Subject"] = subject
-    msg.attach(MIMEText(body, "plain"))
-
-    with smtplib.SMTP(host, port) as server:
-        server.starttls()
-        server.login(user, password)
-        server.sendmail(from_addr, [to_addr], msg.as_string())
 
 
 def main() -> None:
     nasdaq, tsx = get_xanadu_quotes()
-    body = build_email_body(nasdaq, tsx)
-    subject = os.environ.get("EMAIL_SUBJECT") or build_email_subject(nasdaq)
+    monitor_report = run_monitor(update_state=True)
+    body = build_email_body(nasdaq, tsx, monitor_report)
+    subject = build_email_subject(nasdaq)
     send_email(subject, body)
     print(f"Email sent. Subject: {subject}")
 
