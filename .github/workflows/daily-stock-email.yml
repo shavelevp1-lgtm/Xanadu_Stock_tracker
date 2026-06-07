@@ -2,7 +2,8 @@ name: Daily XNDU stock email
 
 on:
   schedule:
-    # 13:00 and 14:00 UTC cover 9:00 AM Toronto (EDT and EST). A step below skips the wrong hour.
+    # Two UTC slots cover 9 AM Toronto in EDT (13 UTC) and EST (14 UTC).
+    # GitHub cron can be delayed; Python sends once per Toronto day in an 8–10 AM window.
     - cron: "0 13 * * 1-5"
     - cron: "0 14 * * 1-5"
   workflow_dispatch:
@@ -11,42 +12,42 @@ jobs:
   send-email:
     runs-on: ubuntu-latest
     steps:
-      - name: Check 9 AM Toronto (scheduled runs only)
-        id: schedule
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "send=true" >> "$GITHUB_OUTPUT"
-          else
-            HOUR=$(TZ=America/Toronto date +%H)
-            if [ "$HOUR" = "09" ]; then
-              echo "send=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "send=false" >> "$GITHUB_OUTPUT"
-              echo "Skipping: Toronto local hour is ${HOUR}, not 09."
-            fi
-          fi
-
       - uses: actions/checkout@v4
-        if: steps.schedule.outputs.send == 'true'
 
-      - name: Restore insider monitor state
-        if: steps.schedule.outputs.send == 'true'
+      - name: Verify required secrets
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: |
+          missing=0
+          for name in SMTP_USER SMTP_PASSWORD EMAIL_TO SEC_USER_AGENT; do
+            val="${!name}"
+            if [ -z "$val" ]; then
+              echo "::error::Repository secret '$name' is missing or empty."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+          echo "Required secrets are set."
+
+      - name: Restore monitor state
         uses: actions/cache@v4
         with:
           path: monitor_state.json
           key: xndu-ceo-monitor-state-v1
 
       - uses: actions/setup-python@v5
-        if: steps.schedule.outputs.send == 'true'
         with:
           python-version: "3.12"
 
       - name: Install dependencies
-        if: steps.schedule.outputs.send == 'true'
         run: pip install -r requirements.txt
 
       - name: Send daily stock and insider email
-        if: steps.schedule.outputs.send == 'true'
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
@@ -56,10 +57,3 @@ jobs:
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: python send_daily_email.py
-
-      - name: Save insider monitor state
-        if: steps.schedule.outputs.send == 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: monitor_state.json
-          key: xndu-ceo-monitor-state-v1

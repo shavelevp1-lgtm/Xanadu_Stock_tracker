@@ -1,13 +1,22 @@
 """Fetch XNDU quotes, SEC insider/filing watch, and email a daily summary."""
 
+import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from email_util import send_email
-from monitor_ceo_filings import format_monitor_sections, run_monitor
+from monitor_ceo_filings import (
+    format_monitor_sections,
+    get_last_email_toronto_date,
+    run_monitor,
+    set_last_email_toronto_date,
+)
 from xanadu_stock import COMPANY_NAME, TICKER, get_xanadu_quotes
 
 TORONTO = ZoneInfo("America/Toronto")
+# Scheduled runs may fire 13:00 or 14:00 UTC; allow a window around 9 AM Toronto.
+SEND_HOUR_START = int(os.environ.get("SEND_HOUR_START", "8"))
+SEND_HOUR_END = int(os.environ.get("SEND_HOUR_END", "10"))
 
 
 def _format_line(exchange: str, price, currency, change, change_percent) -> str:
@@ -54,12 +63,49 @@ def build_email_body(nasdaq, tsx, monitor_report) -> str:
     return "\n".join(lines)
 
 
+def should_send_today() -> tuple[bool, str]:
+    """Gate scheduled GitHub runs so we send once per weekday ~9 AM Toronto."""
+    event = os.environ.get("GITHUB_EVENT_NAME", "")
+    if event != "schedule":
+        return True, "manual or local run"
+
+    now = datetime.now(TORONTO)
+    if now.weekday() >= 5:
+        return False, "weekends disabled"
+
+    if not (SEND_HOUR_START <= now.hour <= SEND_HOUR_END):
+        return False, f"outside send window (Toronto {now:%Y-%m-%d %H:%M})"
+
+    today = now.strftime("%Y-%m-%d")
+    if get_last_email_toronto_date() == today:
+        return False, f"already sent today ({today})"
+
+    return True, f"scheduled send (Toronto {now:%H:%M})"
+
+
 def main() -> None:
+    ok, reason = should_send_today()
+    if not ok:
+        print(f"Email skipped: {reason}")
+        return
+
+    print(f"Sending email: {reason}")
+
     nasdaq, tsx = get_xanadu_quotes()
-    monitor_report = run_monitor(update_state=True)
+    try:
+        monitor_report = run_monitor(update_state=True)
+    except Exception as exc:
+        from monitor_ceo_filings import MonitorReport
+
+        print(f"Monitor warning (email will still send): {exc}")
+        monitor_report = MonitorReport(
+            skipped=True,
+            skip_reason=f"Monitor error: {exc}",
+        )
     body = build_email_body(nasdaq, tsx, monitor_report)
     subject = build_email_subject(nasdaq)
     send_email(subject, body)
+    set_last_email_toronto_date(datetime.now(TORONTO).strftime("%Y-%m-%d"))
     print(f"Email sent. Subject: {subject}")
 
 

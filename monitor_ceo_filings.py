@@ -142,6 +142,16 @@ def _save_state(state: dict[str, Any]) -> None:
     STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
 
+def get_last_email_toronto_date() -> str | None:
+    return _load_state().get("last_email_toronto_date")
+
+
+def set_last_email_toronto_date(date_str: str) -> None:
+    state = _load_state()
+    state["last_email_toronto_date"] = date_str
+    _save_state(state)
+
+
 def _fetch_submissions() -> dict[str, Any]:
     return json.loads(_http_get(SEC_SUBMISSIONS_URL))
 
