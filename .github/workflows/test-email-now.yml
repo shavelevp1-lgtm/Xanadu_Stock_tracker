@@ -1,9 +1,7 @@
-# One-time scheduled test — delete after confirming email arrives.
-name: Test email (one-time schedule)
+# Manual test only — Actions → this workflow → Run workflow
+name: Test email now
 
 on:
-  schedule:
-    - cron: "32 12 13 6 *"  # 12:32 UTC on 2026-06-13 (~5 min after push)
   workflow_dispatch:
 
 jobs:
@@ -24,7 +22,7 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Force send test email
+      - name: Send test email
         id: email
         env:
           FORCE_SEND: "true"

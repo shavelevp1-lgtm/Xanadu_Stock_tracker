@@ -2,10 +2,10 @@ name: Daily XNDU stock email
 
 on:
   schedule:
-    # 13:00 UTC ≈ 9 AM Toronto (EDT); 14:00 UTC ≈ 9 AM Toronto (EST).
-    # GitHub cron is often delayed — script sends on first weekday run, not a strict hour.
-    - cron: "0 13 * * 1-5"
-    - cron: "0 14 * * 1-5"
+    # GitHub often delays scheduled jobs by several hours on free tier.
+    # 05:00/06:00 UTC typically lands ~13:00–14:00 UTC actual run ≈ 9 AM Toronto.
+    - cron: "0 5 * * 1-5"
+    - cron: "0 6 * * 1-5"
   workflow_dispatch:
 
 jobs:
