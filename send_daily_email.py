@@ -14,9 +14,6 @@ from monitor_ceo_filings import (
 from xanadu_stock import COMPANY_NAME, TICKER, get_xanadu_quotes
 
 TORONTO = ZoneInfo("America/Toronto")
-# Scheduled runs may fire 13:00 or 14:00 UTC; allow a window around 9 AM Toronto.
-SEND_HOUR_START = int(os.environ.get("SEND_HOUR_START", "8"))
-SEND_HOUR_END = int(os.environ.get("SEND_HOUR_END", "10"))
 
 
 def _format_line(exchange: str, price, currency, change, change_percent) -> str:
@@ -64,7 +61,7 @@ def build_email_body(nasdaq, tsx, monitor_report) -> str:
 
 
 def should_send_today() -> tuple[bool, str]:
-    """Gate scheduled GitHub runs so we send once per weekday ~9 AM Toronto."""
+    """Gate scheduled runs: weekdays only, once per Toronto calendar day."""
     event = os.environ.get("GITHUB_EVENT_NAME", "")
     if event != "schedule":
         return True, "manual or local run"
@@ -73,14 +70,11 @@ def should_send_today() -> tuple[bool, str]:
     if now.weekday() >= 5:
         return False, "weekends disabled"
 
-    if not (SEND_HOUR_START <= now.hour <= SEND_HOUR_END):
-        return False, f"outside send window (Toronto {now:%Y-%m-%d %H:%M})"
-
     today = now.strftime("%Y-%m-%d")
     if get_last_email_toronto_date() == today:
         return False, f"already sent today ({today})"
 
-    return True, f"scheduled send (Toronto {now:%H:%M})"
+    return True, f"scheduled send (Toronto {now:%Y-%m-%d %H:%M})"
 
 
 def main() -> None:

@@ -2,8 +2,8 @@ name: Daily XNDU stock email
 
 on:
   schedule:
-    # Two UTC slots cover 9 AM Toronto in EDT (13 UTC) and EST (14 UTC).
-    # GitHub cron can be delayed; Python sends once per Toronto day in an 8–10 AM window.
+    # 13:00 UTC ≈ 9 AM Toronto (EDT); 14:00 UTC ≈ 9 AM Toronto (EST).
+    # GitHub cron is often delayed — script sends on first weekday run, not a strict hour.
     - cron: "0 13 * * 1-5"
     - cron: "0 14 * * 1-5"
   workflow_dispatch:
@@ -48,6 +48,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Send daily stock and insider email
+        id: email
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
@@ -56,4 +57,20 @@ jobs:
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
-        run: python send_daily_email.py
+        run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Toronto time: $(TZ=America/Toronto date '+%Y-%m-%d %H:%M %Z')"
+          python send_daily_email.py | tee email.log
+          if grep -q "Email skipped" email.log; then
+            echo "::warning::No email was sent this run. See log above."
+          fi
+          if grep -q "Email sent" email.log; then
+            echo "email_sent=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save monitor state
+        if: always() && steps.email.outputs.email_sent == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: monitor_state.json
+          key: xndu-ceo-monitor-state-v1
