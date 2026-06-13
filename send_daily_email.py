@@ -62,6 +62,9 @@ def build_email_body(nasdaq, tsx, monitor_report) -> str:
 
 def should_send_today() -> tuple[bool, str]:
     """Gate scheduled runs: weekdays only, once per Toronto calendar day."""
+    if os.environ.get("FORCE_SEND", "").lower() in ("1", "true", "yes"):
+        return True, "forced send (test)"
+
     event = os.environ.get("GITHUB_EVENT_NAME", "")
     if event != "schedule":
         return True, "manual or local run"
