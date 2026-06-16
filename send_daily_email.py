@@ -73,6 +73,15 @@ def should_send_today() -> tuple[bool, str]:
     if now.weekday() >= 5:
         return False, "weekends disabled"
 
+    # Only send during morning hours so a delayed GitHub run doesn't email at 3 PM.
+    morning_start = int(os.environ.get("SEND_HOUR_START", "7"))
+    morning_end = int(os.environ.get("SEND_HOUR_END", "11"))
+    if not (morning_start <= now.hour <= morning_end):
+        return False, (
+            f"outside morning window (Toronto {now:%H:%M}, "
+            f"window {morning_start:02d}:00–{morning_end:02d}:59)"
+        )
+
     today = now.strftime("%Y-%m-%d")
     if get_last_email_toronto_date() == today:
         return False, f"already sent today ({today})"
