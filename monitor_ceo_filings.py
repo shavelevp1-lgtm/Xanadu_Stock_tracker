@@ -55,7 +55,7 @@ VOLUME_SPIKE_RATIO = float(os.environ.get("VOLUME_SPIKE_RATIO", "2.0"))
 VOLUME_AVG_DAYS = int(os.environ.get("VOLUME_AVG_DAYS", "20"))
 VOLUME_SCAN_DAYS = int(os.environ.get("VOLUME_SCAN_DAYS", "5"))
 FILING_LOOKBACK_DAYS = int(os.environ.get("FILING_LOOKBACK_DAYS", "14"))
-LARGE_SALE_MIN_SHARES = int(os.environ.get("LARGE_SALE_MIN_SHARES", "500000"))
+LARGE_SALE_MIN_SHARES = int(os.environ.get("LARGE_SALE_MIN_SHARES", "100000"))
 REQUEST_DELAY_SEC = float(os.environ.get("SEC_REQUEST_DELAY_SEC", "0.25"))
 
 
