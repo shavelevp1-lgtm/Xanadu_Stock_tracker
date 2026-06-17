@@ -1,6 +1,7 @@
 """Fetch XNDU quotes, SEC insider/filing watch, and email a daily summary."""
 
 import os
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -14,6 +15,9 @@ from monitor_ceo_filings import (
 from xanadu_stock import COMPANY_NAME, TICKER, get_xanadu_quotes
 
 TORONTO = ZoneInfo("America/Toronto")
+SEND_HOUR = int(os.environ.get("SEND_HOUR_TORONTO", "9"))
+SEND_MINUTE = int(os.environ.get("SEND_MINUTE_TORONTO", "0"))
+MAX_WAIT_SECONDS = int(os.environ.get("MAX_WAIT_SECONDS", str(7 * 3600)))
 
 
 def _format_line(exchange: str, price, currency, change, change_percent) -> str:
@@ -61,7 +65,7 @@ def build_email_body(nasdaq, tsx, monitor_report) -> str:
 
 
 def should_send_today() -> tuple[bool, str]:
-    """Gate scheduled runs: weekdays only, once per Toronto calendar day."""
+    """Basic gates: weekdays, once per day, manual/force bypass."""
     if os.environ.get("FORCE_SEND", "").lower() in ("1", "true", "yes"):
         return True, "forced send (test)"
 
@@ -73,20 +77,44 @@ def should_send_today() -> tuple[bool, str]:
     if now.weekday() >= 5:
         return False, "weekends disabled"
 
-    # Only send during morning hours so a delayed GitHub run doesn't email at 3 PM.
-    morning_start = int(os.environ.get("SEND_HOUR_START", "7"))
-    morning_end = int(os.environ.get("SEND_HOUR_END", "11"))
-    if not (morning_start <= now.hour <= morning_end):
-        return False, (
-            f"outside morning window (Toronto {now:%H:%M}, "
-            f"window {morning_start:02d}:00–{morning_end:02d}:59)"
-        )
-
     today = now.strftime("%Y-%m-%d")
     if get_last_email_toronto_date() == today:
         return False, f"already sent today ({today})"
 
-    return True, f"scheduled send (Toronto {now:%Y-%m-%d %H:%M})"
+    return True, "scheduled run"
+
+
+def wait_for_toronto_send_time() -> tuple[bool, str]:
+    """
+    Scheduled runs: sleep until 9 AM Toronto if the job starts early.
+    If GitHub runs in the afternoon and nothing was sent yet, deliver anyway.
+    """
+    if os.environ.get("GITHUB_EVENT_NAME") != "schedule":
+        return True, "not scheduled"
+    if os.environ.get("FORCE_SEND", "").lower() in ("1", "true", "yes"):
+        return True, "forced send"
+
+    now = datetime.now(TORONTO)
+    target = now.replace(hour=SEND_HOUR, minute=SEND_MINUTE, second=0, microsecond=0)
+
+    if now < target:
+        wait_secs = (target - now).total_seconds()
+        if wait_secs > MAX_WAIT_SECONDS:
+            return False, (
+                f"job started too early to wait until {SEND_HOUR:02d}:{SEND_MINUTE:02d} "
+                f"Toronto ({wait_secs / 3600:.1f}h away)"
+            )
+        print(
+            f"Job started at {now:%H:%M} Toronto — "
+            f"waiting {wait_secs / 60:.0f} min until {SEND_HOUR:02d}:{SEND_MINUTE:02d}..."
+        )
+        time.sleep(wait_secs)
+        return True, f"sent at {SEND_HOUR:02d}:{SEND_MINUTE:02d} Toronto (after wait)"
+
+    if now.hour < 12:
+        return True, f"sent on time (Toronto {now:%H:%M})"
+
+    return True, f"afternoon fallback (Toronto {now:%H:%M}) — GitHub ran late"
 
 
 def main() -> None:
@@ -95,7 +123,12 @@ def main() -> None:
         print(f"Email skipped: {reason}")
         return
 
-    print(f"Sending email: {reason}")
+    ok, timing = wait_for_toronto_send_time()
+    if not ok:
+        print(f"Email skipped: {timing}")
+        return
+
+    print(f"Sending email: {timing}")
 
     nasdaq, tsx = get_xanadu_quotes()
     try:

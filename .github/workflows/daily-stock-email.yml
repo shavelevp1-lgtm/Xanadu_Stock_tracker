@@ -2,15 +2,17 @@ name: Daily XNDU stock email
 
 on:
   schedule:
-    # GitHub free-tier cron is often ~14h late. These fire the night before so
-    # the delayed run lands ~9 AM Toronto (13:00 UTC EDT / 14:00 UTC EST).
+    # GitHub cron is often hours late. Trigger overnight so the job can start
+    # early, sleep until 9 AM Toronto, then send (see send_daily_email.py).
+    - cron: "0 21 * * 0-4"
+    - cron: "0 22 * * 0-4"
     - cron: "0 23 * * 0-4"
-    - cron: "0 0 * * 1-5"
   workflow_dispatch:
 
 jobs:
   send-email:
     runs-on: ubuntu-latest
+    timeout-minutes: 480
     steps:
       - uses: actions/checkout@v4
 
