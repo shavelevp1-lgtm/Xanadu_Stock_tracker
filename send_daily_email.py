@@ -128,6 +128,13 @@ def main() -> None:
         print(f"Email skipped: {timing}")
         return
 
+    # Another queued run may have sent while this one was waiting until 9 AM.
+    if os.environ.get("GITHUB_EVENT_NAME") == "schedule":
+        today = datetime.now(TORONTO).strftime("%Y-%m-%d")
+        if get_last_email_toronto_date() == today:
+            print(f"Email skipped: already sent today ({today}) after wait")
+            return
+
     print(f"Sending email: {timing}")
 
     nasdaq, tsx = get_xanadu_quotes()
@@ -143,8 +150,9 @@ def main() -> None:
         )
     body = build_email_body(nasdaq, tsx, monitor_report)
     subject = build_email_subject(nasdaq)
-    send_email(subject, body)
+    # Claim today's slot before sending so queued runs see it immediately.
     set_last_email_toronto_date(datetime.now(TORONTO).strftime("%Y-%m-%d"))
+    send_email(subject, body)
     print(f"Email sent. Subject: {subject}")
 
 

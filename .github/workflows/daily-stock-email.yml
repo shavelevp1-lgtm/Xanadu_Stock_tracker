@@ -2,12 +2,13 @@ name: Daily XNDU stock email
 
 on:
   schedule:
-    # GitHub cron is often hours late. Trigger overnight so the job can start
-    # early, sleep until 9 AM Toronto, then send (see send_daily_email.py).
-    - cron: "0 21 * * 0-4"
-    - cron: "0 22 * * 0-4"
+    # One trigger per weekday; job waits until 9 AM Toronto (see send_daily_email.py).
     - cron: "0 23 * * 0-4"
   workflow_dispatch:
+
+concurrency:
+  group: xndu-daily-email
+  cancel-in-progress: false
 
 jobs:
   send-email:
